@@ -164,6 +164,18 @@ npm run dev --workspace server
 
 These commands require the root `package.json` to define the corresponding npm workspaces.
 
+## Deployment
+
+- **Frontend:** Vercel
+- **Backend:** Render
+- **Database:** Neon PostgreSQL
+
+The frontend communicates with the backend through the configured API rewrites.
+
+## Live Demo
+
+[KrishiSetu](https://krishi-setu-ashy.vercel.app/)
+
 ## API Overview
 
 The backend exposes RESTful APIs under `/api`.
