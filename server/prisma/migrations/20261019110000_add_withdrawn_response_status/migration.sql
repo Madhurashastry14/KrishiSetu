@@ -1,0 +1,1 @@
+ALTER TYPE "ResponseStatus" ADD VALUE 'WITHDRAWN';

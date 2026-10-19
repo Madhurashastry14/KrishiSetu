@@ -1,0 +1,42 @@
+[
+  {
+    "crop": "Tomato",
+    "market": "Mangaluru APMC",
+    "district": "Dakshina Kannada",
+    "modalPrice": 24,
+    "unit": "kg",
+    "observedAt": "2026-10-16T00:00:00.000Z",
+    "source": "KrishiSetu sample data",
+    "dataType": "DEMO"
+  },
+  {
+    "crop": "Coconut",
+    "market": "Puttur APMC",
+    "district": "Dakshina Kannada",
+    "modalPrice": 32,
+    "unit": "piece",
+    "observedAt": "2026-10-16T00:00:00.000Z",
+    "source": "KrishiSetu sample data",
+    "dataType": "DEMO"
+  },
+  {
+    "crop": "Arecanut",
+    "market": "Kundapura APMC",
+    "district": "Udupi",
+    "modalPrice": 480,
+    "unit": "kg",
+    "observedAt": "2026-10-14T00:00:00.000Z",
+    "source": "KrishiSetu sample data",
+    "dataType": "DEMO"
+  },
+  {
+    "crop": "Banana",
+    "market": "Mangaluru APMC",
+    "district": "Dakshina Kannada",
+    "modalPrice": 38,
+    "unit": "kg",
+    "observedAt": "2026-10-13T00:00:00.000Z",
+    "source": "KrishiSetu sample data",
+    "dataType": "DEMO"
+  }
+]

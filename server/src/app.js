@@ -1,0 +1,36 @@
+import "dotenv/config";
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import cookieParser from "cookie-parser";
+import rateLimit from "express-rate-limit";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { config } from "./config.js";
+import { errorHandler } from "./errors.js";
+import { authRouter } from "./routes/auth.js";
+import { listingsRouter } from "./routes/listings.js";
+import { requestsRouter } from "./routes/requests.js";
+import { pricesRouter } from "./routes/prices.js";
+import { dashboardRouter } from "./routes/dashboard.js";
+import { uploadRouter } from "./routes/uploads.js";
+
+const app = express();
+const directory = path.dirname(fileURLToPath(import.meta.url));
+app.use(helmet());
+app.use(cors({ origin: config.CLIENT_ORIGIN, credentials: true }));
+app.use(express.json({ limit: "1mb" }));
+app.use(cookieParser());
+app.use("/uploads", express.static(path.resolve(directory, "../uploads"), { maxAge: "1d" }));
+app.use("/api/auth", rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false }));
+app.get("/api/health", (req, res) => res.json({ data: { status: "ok" } }));
+app.use("/api/auth", authRouter);
+app.use("/api/listings", listingsRouter);
+app.use("/api/requests", requestsRouter);
+app.use("/api/prices", pricesRouter);
+app.use("/api/dashboard", dashboardRouter);
+app.use("/api/uploads", uploadRouter);
+app.use((req, res) => res.status(404).json({ error: { message: "Endpoint not found." } }));
+app.use(errorHandler);
+
+export default app;

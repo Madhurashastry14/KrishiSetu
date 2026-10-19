@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  FARMER
+  BUYER
+}
+
+enum ListingStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum RequestStatus {
+  OPEN
+  CLOSED
+}
+
+enum ResponseStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+}
+
+enum PriceDataType {
+  LIVE
+  HISTORICAL
+  DEMO
+}
+
+model User {
+  id           String              @id @default(cuid())
+  name         String
+  email        String              @unique
+  passwordHash String
+  role         Role
+  phone        String?
+  shareContact Boolean             @default(false)
+  village      String?
+  district     String?
+  listings     ProduceListing[]
+  requests     BuyerRequest[]
+  responses    RequestResponse[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([role, district])
+}
+
+model ProduceListing {
+  id             String        @id @default(cuid())
+  farmerId       String
+  farmer         User          @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  crop           String
+  quantity       Decimal       @db.Decimal(12, 2)
+  unit           String
+  expectedPrice  Decimal       @db.Decimal(12, 2)
+  village        String
+  district       String
+  imageUrl       String?
+  variety        String?
+  grade          String?
+  status         ListingStatus @default(ACTIVE)
+  buyerRequests  BuyerRequest[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([status, crop, district])
+  @@index([farmerId, status])
+}
+
+model BuyerRequest {
+  id               String             @id @default(cuid())
+  buyerId          String
+  buyer            User               @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  listingId        String?
+  listing          ProduceListing?    @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  crop             String
+  quantity         Decimal            @db.Decimal(12, 2)
+  unit             String
+  targetPrice      Decimal?           @db.Decimal(12, 2)
+  village          String?
+  district         String
+  deadline         DateTime
+  requirements     String?
+  status           RequestStatus      @default(OPEN)
+  responses        RequestResponse[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([status, crop, district, deadline])
+  @@index([buyerId, status])
+  @@index([listingId])
+  @@unique([buyerId, listingId])
+}
+
+model RequestResponse {
+  id          String         @id @default(cuid())
+  requestId   String
+  request     BuyerRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  farmerId    String
+  farmer      User           @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  quantity    Decimal        @db.Decimal(12, 2)
+  unit        String
+  price       Decimal        @db.Decimal(12, 2)
+  message     String?
+  status      ResponseStatus @default(PENDING)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([requestId, farmerId])
+  @@index([farmerId, status])
+}
+
+model MandiPriceObservation {
+  id          String        @id @default(cuid())
+  crop        String
+  market      String
+  district    String?
+  modalPrice  Decimal       @db.Decimal(12, 2)
+  unit        String
+  observedAt  DateTime
+  source      String
+  dataType    PriceDataType @default(DEMO)
+  externalId  String?
+  createdAt   DateTime      @default(now())
+
+  @@unique([externalId])
+  @@index([crop, district, observedAt])
+}
