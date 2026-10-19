@@ -12,9 +12,17 @@ export function errorHandler(error, req, res, next) {
   if (status >= 500) console.error(error);
   res.status(status).json({
     error: {
-      message: status === 500 ? "An unexpected server error occurred." : error.message,
-      ...(error.name === "ZodError" ? { details: error.issues.map(({ path, message }) => ({ path: path.join("."), message })) } : {}),
-      ...(error.details ? { details: error.details } : {})
-    }
+      message:
+        status === 500 ? "An unexpected server error occurred." : error.message,
+      ...(error.name === "ZodError"
+        ? {
+            details: error.issues.map(({ path, message }) => ({
+              path: path.join("."),
+              message,
+            })),
+          }
+        : {}),
+      ...(error.details ? { details: error.details } : {}),
+    },
   });
 }

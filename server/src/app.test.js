@@ -28,7 +28,9 @@ describe("HTTP API", () => {
   });
 
   it("rejects impossible marketplace price ranges before database access", async () => {
-    const response = await request(app).get("/api/listings/marketplace?minPrice=25&maxPrice=10");
+    const response = await request(app).get(
+      "/api/listings/marketplace?minPrice=25&maxPrice=10",
+    );
     expect(response.status).toBe(400);
     expect(response.body.error.message).toContain("Minimum price");
   });
