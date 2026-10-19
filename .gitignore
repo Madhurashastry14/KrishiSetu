@@ -7,3 +7,10 @@ coverage/
 server/uploads/*
 !server/uploads/.gitkeep
 *.log
+
+# Local environment files
+server/.env
+
+# Local uploads (keep the directory)
+server/uploads/*
+!server/uploads/.gitkeep
