@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://https://krishisetu-a8ga.onrender.com/api/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "https://https://krishisetu-a8ga.onrender.com/uploads/:path*"
+    }
+  ]
+}
