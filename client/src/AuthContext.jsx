@@ -9,13 +9,28 @@ export function AuthProvider({ children }) {
   const [ready, setReady] = useState(false);
   const [authError, setAuthError] = useState("");
   useEffect(() => {
-    api("/auth/me")
-      .then(({ user: current }) => setUser(current))
-      .catch((error) => {
+    let active = true;
+    async function loadCurrentUser() {
+      try {
+        const result = await api("/auth/me");
+        if (!result || typeof result !== "object" || !("user" in result))
+          throw new Error("The server returned an invalid authentication response.");
+        if (active) {
+          setUser(result.user);
+          setAuthError("");
+        }
+      } catch (error) {
+        if (!active) return;
         setUser(null);
         if (error.status !== 401) setAuthError(error.message);
-      })
-      .finally(() => setReady(true));
+      } finally {
+        if (active) setReady(true);
+      }
+    }
+    loadCurrentUser();
+    return () => {
+      active = false;
+    };
   }, []);
   const value = {
     user,
@@ -45,5 +60,8 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+  if (!context)
+    throw new Error("useAuth must be used within an AuthProvider.");
+  return context;
 }

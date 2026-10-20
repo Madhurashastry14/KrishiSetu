@@ -2,11 +2,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "YOUR_EXISTING_API_REWRITE_DESTINATION"
+      "destination": "https://krishisetu-a8ga.onrender.com/api/:path*"
     },
     {
       "source": "/uploads/:path*",
-      "destination": "YOUR_EXISTING_UPLOADS_REWRITE_DESTINATION"
+      "destination": "https://krishisetu-a8ga.onrender.com/uploads/:path*"
     },
     {
       "source": "/(.*)",

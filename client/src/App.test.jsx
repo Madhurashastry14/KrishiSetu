@@ -66,6 +66,55 @@ describe("KrishiSetu entry flows", () => {
     expect(screen.getByLabelText("Password")).toBeRequired();
   });
 
+  it("keeps a refreshed nested route loading until the current user is resolved", async () => {
+    let resolveAuthRequest;
+    global.fetch = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveAuthRequest = resolve;
+        }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/listings/new"]}>
+        <LanguageProvider>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </LanguageProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Welcome back" }),
+    ).not.toBeInTheDocument();
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/auth/me"),
+      expect.objectContaining({ credentials: "include" }),
+    );
+
+    resolveAuthRequest({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          user: {
+            id: "farmer-1",
+            name: "Farmer One",
+            role: "FARMER",
+            village: "Kavoor",
+            district: "Udupi",
+          },
+        },
+      }),
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Add produce" }),
+    ).toBeInTheDocument();
+  });
+
   it("opens and submits the purchase-request form from a listing detail", async () => {
     const listing = {
       id: "listing-1",
@@ -96,7 +145,7 @@ describe("KrishiSetu entry flows", () => {
       responses: [],
     };
     global.fetch = vi.fn(async (url, options = {}) => {
-      const path = new URL(url).pathname;
+      const path = new URL(url, "http://localhost").pathname;
       let payload;
       if (path.endsWith("/auth/me"))
         payload = {
@@ -161,7 +210,7 @@ describe("KrishiSetu entry flows", () => {
 
   it("shows contact actions only when the farmer has opted in", async () => {
     global.fetch = vi.fn(async (url) => {
-      const path = new URL(url).pathname;
+      const path = new URL(url, "http://localhost").pathname;
       if (path.endsWith("/auth/me"))
         return {
           ok: false,
