@@ -1,8 +1,9 @@
 import React from "react";
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Search, ShieldCheck } from "lucide-react";
+import { BarChart3, RefreshCw, ShieldCheck } from "lucide-react";
 import {
   CartesianGrid,
+  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -12,8 +13,13 @@ import {
 } from "recharts";
 import { api } from "./api.js";
 import { useLanguage } from "./i18n.jsx";
+import {
+  buildPriceChartModel,
+  filterPriceObservations,
+  summarizeMarketPrices,
+} from "./priceInsights.js";
 
-const districts = ["Dakshina Kannada", "Udupi"];
+const colors = ["#286546", "#bd7a22", "#4d78a8", "#9c5a78", "#6c7e37"];
 const money = (value) =>
   `₹${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const prettyDate = (value) =>
@@ -22,6 +28,7 @@ const prettyDate = (value) =>
     month: "short",
     year: "numeric",
   });
+const normalized = (value) => String(value || "").toLowerCase();
 
 function Field({ label, children }) {
   return (
@@ -29,15 +36,6 @@ function Field({ label, children }) {
       <span>{label}</span>
       {children}
     </label>
-  );
-}
-
-function Button({ children, icon: Icon, ...props }) {
-  return (
-    <button className="button button-primary" {...props}>
-      {Icon && <Icon size={17} />}
-      {children}
-    </button>
   );
 }
 
@@ -53,22 +51,66 @@ function PageHeading({ eyebrow, title, detail }) {
   );
 }
 
-function ErrorNote({ children }) {
-  return children ? (
-    <div className="notice notice-error" role="alert">
-      {children}
-    </div>
-  ) : null;
-}
-
-function EmptyState({ title }) {
+function EmptyState({ title, detail }) {
   return (
     <div className="empty-state">
       <span className="empty-icon">
         <BarChart3 size={22} />
       </span>
       <h3>{title}</h3>
+      {detail && <p>{detail}</p>}
     </div>
+  );
+}
+
+function PriceTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const observation = payload[0].payload.observation;
+  if (!observation) return null;
+  const isDemo = observation.dataType === "DEMO";
+  return (
+    <div className="price-tooltip">
+      <strong>{observation.crop}</strong>
+      <span>{money(observation.modalPrice)} / {observation.unit}</span>
+      <span>{observation.market}</span>
+      <span>{observation.district || "District not specified"}</span>
+      <span>{prettyDate(observation.observedAt)}</span>
+      <span>{isDemo ? "Demo data" : observation.source}</span>
+      {isDemo && <small>Not verified live mandi prices</small>}
+    </div>
+  );
+}
+
+function PriceSummary({ summary }) {
+  const { latest, previous, absoluteChange, percentageChange } = summary;
+  return (
+    <article className="price-summary-card">
+      <div className="price-summary-heading">
+        <strong>{latest.market}</strong>
+        <span>{latest.district || "District not specified"}</span>
+      </div>
+      <div className="price-summary-latest">
+        <strong>{money(latest.modalPrice)}</strong>
+        <span> / {latest.unit}</span>
+      </div>
+      <p>Latest · {prettyDate(latest.observedAt)}</p>
+      {previous && percentageChange !== null ? (
+        <div className="price-summary-change">
+          <span>
+            Previous: {money(previous.modalPrice)} · {prettyDate(previous.observedAt)}
+          </span>
+          <strong className={absoluteChange >= 0 ? "change-positive" : "change-negative"}>
+            {absoluteChange >= 0 ? "+" : ""}
+            {money(absoluteChange)} ({percentageChange >= 0 ? "+" : ""}
+            {percentageChange.toFixed(1)}%)
+          </strong>
+        </div>
+      ) : (
+        <div className="price-summary-insufficient">
+          Insufficient historical data
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -76,37 +118,78 @@ export default function PriceInsights() {
   const { t } = useLanguage();
   const [crop, setCrop] = useState("Tomato");
   const [district, setDistrict] = useState("");
+  const [market, setMarket] = useState("");
+  const [dateRange, setDateRange] = useState("all");
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  async function load(event) {
-    event?.preventDefault();
+
+  async function load() {
     setLoading(true);
     setError("");
-    const query = new URLSearchParams({
-      crop,
-      ...(district ? { district } : {}),
-    });
     try {
-      setData(await api(`/prices/insights?${query}`));
+      setData(await api("/prices/"));
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   }
+
   useEffect(() => {
     load();
   }, []);
-  const chartData = useMemo(
-    () =>
-      (data?.items || []).map((item) => ({
-        ...item,
-        label: prettyDate(item.observedAt),
-        value: Number(item.modalPrice),
-      })),
-    [data],
+
+  const items = data?.items || [];
+  const crops = useMemo(
+    () => [...new Set(items.map((item) => item.crop))].sort((a, b) => a.localeCompare(b)),
+    [items],
   );
+  useEffect(() => {
+    if (crops.length && !crops.some((item) => normalized(item) === normalized(crop)))
+      setCrop(crops[0]);
+  }, [crops, crop]);
+
+  const districts = useMemo(
+    () =>
+      [...new Set(
+        items
+          .filter((item) => !crop || normalized(item.crop) === normalized(crop))
+          .map((item) => item.district)
+          .filter(Boolean),
+      )].sort((a, b) => a.localeCompare(b)),
+    [items, crop],
+  );
+  const markets = useMemo(
+    () =>
+      [...new Set(
+        items
+          .filter(
+            (item) =>
+              (!crop || normalized(item.crop) === normalized(crop)) &&
+              (!district || normalized(item.district) === normalized(district)),
+          )
+          .map((item) => item.market),
+      )].sort((a, b) => a.localeCompare(b)),
+    [items, crop, district],
+  );
+  useEffect(() => {
+    if (market && !markets.some((item) => normalized(item) === normalized(market)))
+      setMarket("");
+  }, [market, markets]);
+
+  const filteredItems = useMemo(
+    () => filterPriceObservations(items, { crop, district, market, dateRange }),
+    [items, crop, district, market, dateRange],
+  );
+  const chart = useMemo(() => buildPriceChartModel(filteredItems), [filteredItems]);
+  const summaries = useMemo(
+    () => summarizeMarketPrices(filteredItems),
+    [filteredItems],
+  );
+  const demoRecords = filteredItems.some((item) => item.dataType === "DEMO");
+  const sufficientTrend = chart.points.length > 1;
+
   return (
     <div className="page-content">
       <PageHeading
@@ -114,101 +197,155 @@ export default function PriceInsights() {
         title={t("prices")}
         detail={t("insightCopy")}
       />
-      <form className="filter-bar insights-filter" onSubmit={load}>
-        <Field label={t("searchCrop")}>
-          <input
+      <div className="filter-bar insights-filter">
+        <Field label="Crop">
+          <select
+            aria-label="Crop"
             value={crop}
             onChange={(event) => setCrop(event.target.value)}
-            required
-          />
+          >
+            {!crops.length && <option value="Tomato">Tomato</option>}
+            {crops.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
         </Field>
         <Field label={t("filterDistrict")}>
           <select
+            aria-label="District"
             value={district}
             onChange={(event) => setDistrict(event.target.value)}
           >
             <option value="">{t("allDistricts")}</option>
-            {districts.map((d) => (
-              <option key={d}>{d}</option>
-            ))}
+            {districts.map((item) => <option key={item}>{item}</option>)}
           </select>
         </Field>
-        <Button type="submit" icon={Search}>
-          Show prices
-        </Button>
-      </form>
-      <ErrorNote>{error}</ErrorNote>
-      {loading ? (
-        <div className="panel-loading">
+        <Field label="Market">
+          <select
+            aria-label="Market"
+            value={market}
+            onChange={(event) => setMarket(event.target.value)}
+          >
+            <option value="">All markets</option>
+            {markets.map((item) => <option key={item}>{item}</option>)}
+          </select>
+        </Field>
+        <Field label="Date range">
+          <select
+            aria-label="Date range"
+            value={dateRange}
+            onChange={(event) => setDateRange(event.target.value)}
+          >
+            <option value="all">Any date</option>
+            <option value="7d">Past 7 days</option>
+            <option value="30d">Past 30 days</option>
+            <option value="90d">Past 90 days</option>
+          </select>
+        </Field>
+      </div>
+      {error ? (
+        <div className="notice notice-error price-error" role="alert">
+          <span>{error}</span>
+          <button className="button button-secondary" onClick={load} type="button">
+            <RefreshCw size={15} /> Retry
+          </button>
+        </div>
+      ) : loading ? (
+        <div className="panel-loading" role="status">
           <span className="spinner" />
           {t("loading")}
         </div>
       ) : (
-        data && (
+        <>
+          {demoRecords && (
+            <div className="demo-disclaimer" role="note">
+              <strong>Demo data</strong> — these sample records are not verified
+              live mandi prices.
+            </div>
+          )}
           <div className="insights-grid">
             <section className="panel chart-panel">
               <div className="panel-heading">
                 <div>
                   <span className="eyebrow">HISTORICAL OBSERVATIONS</span>
-                  <h2>{data.crop} · modal price</h2>
+                  <h2>{crop || "Crop"} · modal mandi price trend</h2>
                 </div>
-                <span className="unit-pill">
-                  {chartData[0]?.unit || "₹ / unit"}
-                </span>
+                <span className="unit-pill">₹ · per series unit</span>
               </div>
-              {chartData.length ? (
-                <div className="chart-wrap">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={chartData}
-                      margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
-                    >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        vertical={false}
-                        stroke="#e6e9e1"
-                      />
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fontSize: 11, fill: "#718075" }}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <YAxis
-                        width={48}
-                        tick={{ fontSize: 11, fill: "#718075" }}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <Tooltip
-                        formatter={(value) => [money(value), "Modal price"]}
-                        contentStyle={{
-                          borderRadius: 8,
-                          borderColor: "#e6e9e1",
-                        }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="value"
-                        stroke="#286546"
-                        strokeWidth={2.5}
-                        dot={{
-                          r: 4,
-                          fill: "#286546",
-                          strokeWidth: 2,
-                          stroke: "#fff",
-                        }}
-                        activeDot={{ r: 6 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+              {chart.points.length ? (
+                <>
+                  <div className="chart-wrap" aria-label={`${crop} price trend graph`}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={chart.points}
+                        margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          vertical={false}
+                          stroke="#e6e9e1"
+                        />
+                        <XAxis
+                          dataKey="observedAt"
+                          tickFormatter={(value) => prettyDate(value)}
+                          tick={{ fontSize: 11, fill: "#718075" }}
+                          axisLine={false}
+                          tickLine={false}
+                          minTickGap={20}
+                        />
+                        <YAxis
+                          width={58}
+                          tickFormatter={(value) => money(value)}
+                          tick={{ fontSize: 11, fill: "#718075" }}
+                          axisLine={false}
+                          tickLine={false}
+                          label={{
+                            value: "Modal price (₹)",
+                            angle: -90,
+                            position: "insideLeft",
+                            fill: "#718075",
+                            fontSize: 10,
+                          }}
+                        />
+                        <Tooltip content={<PriceTooltip />} />
+                        {chart.series.length > 1 && (
+                          <Legend
+                            verticalAlign="top"
+                            height={32}
+                            wrapperStyle={{ fontSize: 10 }}
+                          />
+                        )}
+                        {chart.series.map((series, index) => (
+                          <Line
+                            key={series.key}
+                            name={`${series.crop} · ${series.market}${series.district ? ` · ${series.district}` : ""} / ${series.unit}`}
+                            type="monotone"
+                            dataKey={series.key}
+                            stroke={colors[index % colors.length]}
+                            strokeWidth={2.5}
+                            connectNulls
+                            dot={{ r: 4, strokeWidth: 2, stroke: "#fff" }}
+                            activeDot={{ r: 6 }}
+                            isAnimationActive={false}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {!sufficientTrend && (
+                    <p className="trend-note">
+                      More observations are needed to show a meaningful price trend.
+                    </p>
+                  )}
+                </>
               ) : (
-                <EmptyState title={t("historyEmpty")} />
+                <EmptyState
+                  title="No matching price observations"
+                  detail="Try another crop, market, district, or date range."
+                />
               )}
               <p className="chart-explainer">
-                This chart shows recorded reference observations only. It does
-                not forecast future prices.
+                Points show recorded observations only; lines connect the same
+                crop, market, district, and unit. Historical changes are not
+                forecasts.
               </p>
             </section>
             <section className="panel observations-panel">
@@ -217,27 +354,16 @@ export default function PriceInsights() {
                   <span className="eyebrow">SOURCE & FRESHNESS</span>
                   <h2>Latest references</h2>
                 </div>
-                <span
-                  className={`data-source-badge ${data.dataMode === "sample_demo" ? "source-demo" : data.dataMode === "none" ? "source-none" : "source-live"}`}
-                >
-                  {data.dataMode === "sample_demo"
-                    ? t("sampleData")
-                    : data.dataMode === "live"
-                      ? "Verified · recent live data"
-                      : data.dataMode === "none"
-                        ? t("noObservations")
-                        : "Fetched historical data"}
+                <span className={`data-source-badge ${demoRecords ? "source-demo" : filteredItems.length ? "source-live" : "source-none"}`}>
+                  {demoRecords ? "Demo data" : filteredItems.length ? "Recorded data" : t("noObservations")}
                 </span>
               </div>
-              {data.items.length ? (
+              {filteredItems.length ? (
                 <div className="observation-list">
-                  {[...data.items].reverse().map((item) => (
+                  {[...filteredItems].reverse().map((item, index) => (
                     <div
                       className="observation-row"
-                      key={
-                        item.id ||
-                        `${item.crop}-${item.market}-${item.observedAt}`
-                      }
+                      key={item.id || `${item.crop}-${item.market}-${item.observedAt}-${index}`}
                     >
                       <span className="crop-avatar">
                         <BarChart3 size={16} />
@@ -245,8 +371,7 @@ export default function PriceInsights() {
                       <span className="observation-copy">
                         <strong>{item.market}</strong>
                         <small>
-                          {item.district || "Market"} ·{" "}
-                          {prettyDate(item.observedAt)}
+                          {item.district || "Market"} · {prettyDate(item.observedAt)}
                         </small>
                       </span>
                       <strong>
@@ -265,7 +390,30 @@ export default function PriceInsights() {
               </div>
             </section>
           </div>
-        )
+          <section className="price-summary-section" aria-labelledby="price-summary-title">
+            <div className="price-summary-section-heading">
+              <div>
+                <span className="eyebrow">HISTORICAL COMPARISON</span>
+                <h2 id="price-summary-title">Price change by market</h2>
+              </div>
+              <span>Same crop, market, and unit</span>
+            </div>
+            {summaries.length ? (
+              <div className="price-summary-grid">
+                {summaries.map((summary) => (
+                  <PriceSummary
+                    key={`${summary.crop}-${summary.market}-${summary.district}-${summary.unit}`}
+                    summary={summary}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="price-summary-insufficient">
+                Insufficient historical data
+              </p>
+            )}
+          </section>
+        </>
       )}
     </div>
   );
