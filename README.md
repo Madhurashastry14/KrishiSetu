@@ -170,7 +170,13 @@ These commands require the root `package.json` to define the corresponding npm w
 - **Backend:** Render
 - **Database:** Neon PostgreSQL
 
-The frontend communicates with the backend through the configured API rewrites.
+The frontend communicates with the backend through the API and uploads rewrites
+in `client/vercel.json`; keep these rewrites before the frontend catch-all. The
+client defaults to the same-origin `/api` path, so `VITE_API_URL` can remain
+unset on Vercel (or be set to `/api`). Keep API endpoint paths free of a
+terminal slash so they match the deployed API rewrites. Pointing the client
+directly at Render instead requires its `CLIENT_ORIGIN` to allow the deployed
+Vercel origin.
 
 ## Live Demo
 

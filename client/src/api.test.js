@@ -59,7 +59,8 @@ describe("API response handling", () => {
     );
 
     await expect(api("/auth/me")).rejects.toMatchObject({
-      message: "The server returned a non-JSON response (200, text/html).",
+      message:
+        "API endpoint /api/auth/me returned a non-JSON response (200, text/html).",
       status: 200,
     });
     expect(log).toHaveBeenCalledWith(
@@ -69,6 +70,33 @@ describe("API response handling", () => {
         status: 200,
         contentType: "text/html",
         error: expect.stringContaining("JSON parsing failed"),
+      }),
+    );
+  });
+
+  it("identifies the endpoint and status for unexpected HTML API responses", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "text/html; charset=utf-8" }),
+        text: async () => "<!doctype html><html></html>",
+      }),
+    );
+
+    await expect(api("/prices")).rejects.toMatchObject({
+      message:
+        "API endpoint /api/prices returned a non-JSON response (200, text/html; charset=utf-8).",
+      status: 200,
+    });
+    expect(log).toHaveBeenCalledWith(
+      "[KrishiSetu API]",
+      expect.objectContaining({
+        endpoint: "/api/prices",
+        status: 200,
+        contentType: "text/html; charset=utf-8",
       }),
     );
   });

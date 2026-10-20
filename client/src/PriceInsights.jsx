@@ -103,7 +103,7 @@ export default function PriceInsights() {
     setLoading(true);
     setError("");
     try {
-      setData(await api("/prices/"));
+      setData(await api("/prices"));
     } catch (err) {
       setError(err.message);
     } finally {

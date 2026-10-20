@@ -108,7 +108,7 @@ describe("Price Insights page", () => {
       screen.getByText(/Markets with one observation show only a point/i),
     ).toBeInTheDocument();
     expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/prices/"),
+      "/api/prices",
       expect.objectContaining({ credentials: "include" }),
     );
 

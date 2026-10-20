@@ -9,6 +9,10 @@ function logAuthResponse(details) {
     });
 }
 
+function getEndpointPath(url) {
+  return new URL(url, "http://localhost").pathname;
+}
+
 export async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
   const isAuthRequest = path.startsWith("/auth/");
@@ -39,6 +43,7 @@ export async function api(path, options = {}) {
     throw error;
   }
   const contentType = response.headers?.get?.("content-type") || "not provided";
+  const endpoint = getEndpointPath(url);
   if (response.status === 304) {
     logAuthResponse({
       method: options.method || "GET",
@@ -61,6 +66,14 @@ export async function api(path, options = {}) {
         try {
           payload = JSON.parse(text);
         } catch (error) {
+          if (isDevelopment)
+            console.error("[KrishiSetu API]", {
+              method: options.method || "GET",
+              endpoint,
+              status: response.status,
+              contentType,
+              error: `JSON parsing failed: ${error.message}`,
+            });
           if (isAuthRequest)
             logAuthResponse({
               method: options.method || "GET",
@@ -72,7 +85,7 @@ export async function api(path, options = {}) {
             });
           if (response.ok) {
             const parseError = new Error(
-              `The server returned a non-JSON response (${response.status}, ${contentType}).`,
+              `API endpoint ${endpoint} returned a non-JSON response (${response.status}, ${contentType}).`,
             );
             parseError.status = response.status;
             throw parseError;
@@ -97,6 +110,14 @@ export async function api(path, options = {}) {
       try {
         payload = await response.json();
       } catch (error) {
+        if (isDevelopment)
+          console.error("[KrishiSetu API]", {
+            method: options.method || "GET",
+            endpoint,
+            status: response.status,
+            contentType,
+            error: `JSON parsing failed: ${error.message}`,
+          });
         if (isAuthRequest)
           logAuthResponse({
             method: options.method || "GET",
@@ -107,7 +128,7 @@ export async function api(path, options = {}) {
           });
         if (response.ok)
           throw new Error(
-            `The server returned a non-JSON response (${response.status}, ${contentType}).`,
+            `API endpoint ${endpoint} returned a non-JSON response (${response.status}, ${contentType}).`,
           );
       }
     } else if (response.ok) {
