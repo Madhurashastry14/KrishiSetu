@@ -1,14 +1,31 @@
-const normalize = (value) => String(value || "").trim().toLowerCase();
+const normalize = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
+const isValidObservation = (item) =>
+  Number.isFinite(new Date(item.observedAt).getTime()) &&
+  Number.isFinite(Number(item.modalPrice)) &&
+  Number(item.modalPrice) > 0;
 
 export function sortPriceObservations(items) {
-  return [...items].sort(
-    (a, b) => new Date(a.observedAt).getTime() - new Date(b.observedAt).getTime(),
-  );
+  return items
+    .filter(isValidObservation)
+    .sort(
+      (a, b) =>
+        new Date(a.observedAt).getTime() - new Date(b.observedAt).getTime(),
+    );
 }
 
 export function filterPriceObservations(
   items,
-  { crop = "", district = "", market = "", dateRange = "all", now = new Date() } = {},
+  {
+    crop = "",
+    district = "",
+    market = "",
+    unit = "",
+    dateRange = "all",
+    now = new Date(),
+  } = {},
 ) {
   const days = Number.parseInt(dateRange, 10);
   const cutoff = Number.isFinite(days)
@@ -21,6 +38,7 @@ export function filterPriceObservations(
         (!crop || normalize(item.crop) === normalize(crop)) &&
         (!district || normalize(item.district) === normalize(district)) &&
         (!market || normalize(item.market) === normalize(market)) &&
+        (!unit || normalize(item.unit) === normalize(unit)) &&
         (cutoff === null || (timestamp >= cutoff && timestamp <= now.getTime()))
       );
     }),
@@ -44,14 +62,19 @@ export function buildPriceChartModel(items) {
         market: observation.market,
         district: observation.district,
         unit: observation.unit,
+        observationCount: 0,
       });
     }
+    groups.get(groupId).observationCount++;
     return groups.get(groupId).key;
   });
+  const series = [...groups.values()];
   return {
-    series: [...groups.values()],
+    series,
+    hasTrend: series.some((item) => item.observationCount > 1),
+    hasInsufficientSeries: series.some((item) => item.observationCount === 1),
     points: sorted.map((observation, index) => ({
-      observedAt: observation.observedAt,
+      timestamp: new Date(observation.observedAt).getTime(),
       [seriesKeys[index]]: Number(observation.modalPrice),
       observation,
     })),
@@ -74,12 +97,19 @@ export function summarizeMarketPrices(items) {
     .map((observations) => {
       const latest = observations[observations.length - 1];
       const previous = observations[observations.length - 2] || null;
-      const absoluteChange = previous
-        ? Number(latest.modalPrice) - Number(previous.modalPrice)
-        : null;
+      const absoluteChange =
+        previous &&
+        Number.isFinite(Number(latest.modalPrice)) &&
+        Number.isFinite(Number(previous.modalPrice))
+          ? Number(latest.modalPrice) - Number(previous.modalPrice)
+          : null;
       const previousPrice =
         previous && Number(previous.modalPrice) > 0
           ? Number(previous.modalPrice)
+          : null;
+      const percentageChange =
+        absoluteChange !== null && previousPrice
+          ? (absoluteChange / previousPrice) * 100
           : null;
       return {
         market: latest.market,
@@ -89,8 +119,8 @@ export function summarizeMarketPrices(items) {
         latest,
         previous,
         absoluteChange,
-        percentageChange: previousPrice
-          ? (absoluteChange / previousPrice) * 100
+        percentageChange: Number.isFinite(percentageChange)
+          ? percentageChange
           : null,
       };
     })

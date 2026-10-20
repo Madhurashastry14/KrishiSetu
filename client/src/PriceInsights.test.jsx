@@ -49,6 +49,28 @@ const demoItems = [
     source: "KrishiSetu sample data",
     dataType: "DEMO",
   },
+  {
+    id: "tomato-piece",
+    crop: "Tomato",
+    market: "Mangaluru APMC",
+    district: "Dakshina Kannada",
+    modalPrice: 30,
+    unit: "piece",
+    observedAt: "2026-10-19T00:00:00.000Z",
+    source: "KrishiSetu sample data",
+    dataType: "DEMO",
+  },
+  {
+    id: "tomato-old",
+    crop: "Tomato",
+    market: "Mangaluru APMC",
+    district: "Dakshina Kannada",
+    modalPrice: 18,
+    unit: "kg",
+    observedAt: "2026-09-01T00:00:00.000Z",
+    source: "KrishiSetu sample data",
+    dataType: "DEMO",
+  },
 ];
 
 function renderPage(items = demoItems) {
@@ -75,10 +97,16 @@ describe("Price Insights page", () => {
   it("loads real API observations, labels demo records, and filters crop and market", async () => {
     renderPage();
 
-    expect(await screen.findByText(/these sample records are not verified/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/these sample records are not verified/i),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Demo data").length).toBeGreaterThan(0);
     expect(screen.getAllByText("₹25").length).toBeGreaterThan(0);
-    expect(screen.getByText("+₹5 (+25.0%)")).toBeInTheDocument();
+    expect(screen.queryByText("HISTORICAL COMPARISON")).not.toBeInTheDocument();
+    expect(screen.queryByText("Price change by market")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Markets with one observation show only a point/i),
+    ).toBeInTheDocument();
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/prices/"),
       expect.objectContaining({ credentials: "include" }),
@@ -88,13 +116,50 @@ describe("Price Insights page", () => {
       target: { value: "Udupi APMC" },
     });
     expect((await screen.findAllByText("₹26")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Insufficient historical data")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Only one observation is available for each selected market/i),
+    ).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Crop"), {
       target: { value: "Banana" },
     });
     expect((await screen.findAllByText("₹38")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Banana · modal mandi price trend")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Banana · prices by market · kg over time/),
+    ).toBeInTheDocument();
+  });
+
+  it("filters by district, date range, and unit without mixing scales", async () => {
+    renderPage();
+    await screen.findByText(/these sample records are not verified/i);
+    expect(screen.getAllByText("₹18").length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByLabelText("District"), {
+      target: { value: "Udupi" },
+    });
+    expect((await screen.findAllByText("₹26")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("₹25")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("District"), {
+      target: { value: "Dakshina Kannada" },
+    });
+    fireEvent.change(screen.getByLabelText("Price unit"), {
+      target: { value: "kg" },
+    });
+    expect((await screen.findAllByText("₹18")).length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText("Date range"), {
+      target: { value: "7d" },
+    });
+    expect(screen.queryByText("₹18")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Price unit"), {
+      target: { value: "piece" },
+    });
+    expect((await screen.findAllByText("₹30")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("₹25")).not.toBeInTheDocument();
+    expect(screen.getByText("₹ / piece")).toBeInTheDocument();
+
+    expect((await screen.findAllByText("₹30")).length).toBeGreaterThan(0);
   });
 
   it("shows an empty state when the API returns no price observations", async () => {
@@ -102,7 +167,9 @@ describe("Price Insights page", () => {
     expect(
       await screen.findByText("No matching price observations"),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/not verified live mandi prices/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/not verified live mandi prices/i),
+    ).not.toBeInTheDocument();
   });
 
   it("shows an explicit API error state", async () => {
@@ -113,7 +180,9 @@ describe("Price Insights page", () => {
       </LanguageProvider>,
     );
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Service unavailable");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Service unavailable",
+    );
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
   });
 });

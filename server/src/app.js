@@ -25,6 +25,12 @@ app.use(
   "/uploads",
   express.static(path.resolve(directory, "../uploads"), { maxAge: "1d" }),
 );
+app.use("/api/auth", (req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  delete req.headers["if-none-match"];
+  delete req.headers["if-modified-since"];
+  next();
+});
 app.use(
   "/api/auth",
   rateLimit({

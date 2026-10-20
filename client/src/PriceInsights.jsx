@@ -16,7 +16,6 @@ import { useLanguage } from "./i18n.jsx";
 import {
   buildPriceChartModel,
   filterPriceObservations,
-  summarizeMarketPrices,
 } from "./priceInsights.js";
 
 const colors = ["#286546", "#bd7a22", "#4d78a8", "#9c5a78", "#6c7e37"];
@@ -65,52 +64,27 @@ function EmptyState({ title, detail }) {
 
 function PriceTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
-  const observation = payload[0].payload.observation;
+  const point = payload.find(
+    (entry) => entry.value !== null && entry.value !== undefined,
+  );
+  const observation = point?.payload.observation;
   if (!observation) return null;
   const isDemo = observation.dataType === "DEMO";
   return (
     <div className="price-tooltip">
       <strong>{observation.crop}</strong>
-      <span>{money(observation.modalPrice)} / {observation.unit}</span>
+      <span>
+        {money(observation.modalPrice)} / {observation.unit}
+      </span>
       <span>{observation.market}</span>
       <span>{observation.district || "District not specified"}</span>
       <span>{prettyDate(observation.observedAt)}</span>
-      <span>{isDemo ? "Demo data" : observation.source}</span>
+      <span>
+        {isDemo ? "Demo data · " : ""}
+        {observation.source || "Source not specified"}
+      </span>
       {isDemo && <small>Not verified live mandi prices</small>}
     </div>
-  );
-}
-
-function PriceSummary({ summary }) {
-  const { latest, previous, absoluteChange, percentageChange } = summary;
-  return (
-    <article className="price-summary-card">
-      <div className="price-summary-heading">
-        <strong>{latest.market}</strong>
-        <span>{latest.district || "District not specified"}</span>
-      </div>
-      <div className="price-summary-latest">
-        <strong>{money(latest.modalPrice)}</strong>
-        <span> / {latest.unit}</span>
-      </div>
-      <p>Latest · {prettyDate(latest.observedAt)}</p>
-      {previous && percentageChange !== null ? (
-        <div className="price-summary-change">
-          <span>
-            Previous: {money(previous.modalPrice)} · {prettyDate(previous.observedAt)}
-          </span>
-          <strong className={absoluteChange >= 0 ? "change-positive" : "change-negative"}>
-            {absoluteChange >= 0 ? "+" : ""}
-            {money(absoluteChange)} ({percentageChange >= 0 ? "+" : ""}
-            {percentageChange.toFixed(1)}%)
-          </strong>
-        </div>
-      ) : (
-        <div className="price-summary-insufficient">
-          Insufficient historical data
-        </div>
-      )}
-    </article>
   );
 }
 
@@ -119,6 +93,7 @@ export default function PriceInsights() {
   const [crop, setCrop] = useState("Tomato");
   const [district, setDistrict] = useState("");
   const [market, setMarket] = useState("");
+  const [unit, setUnit] = useState("");
   const [dateRange, setDateRange] = useState("all");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -142,53 +117,100 @@ export default function PriceInsights() {
 
   const items = data?.items || [];
   const crops = useMemo(
-    () => [...new Set(items.map((item) => item.crop))].sort((a, b) => a.localeCompare(b)),
+    () =>
+      [...new Set(items.map((item) => item.crop))].sort((a, b) =>
+        a.localeCompare(b),
+      ),
     [items],
   );
   useEffect(() => {
-    if (crops.length && !crops.some((item) => normalized(item) === normalized(crop)))
+    if (
+      crops.length &&
+      !crops.some((item) => normalized(item) === normalized(crop))
+    )
       setCrop(crops[0]);
   }, [crops, crop]);
 
   const districts = useMemo(
     () =>
-      [...new Set(
-        items
-          .filter((item) => !crop || normalized(item.crop) === normalized(crop))
-          .map((item) => item.district)
-          .filter(Boolean),
-      )].sort((a, b) => a.localeCompare(b)),
+      [
+        ...new Set(
+          items
+            .filter(
+              (item) => !crop || normalized(item.crop) === normalized(crop),
+            )
+            .map((item) => item.district)
+            .filter(Boolean),
+        ),
+      ].sort((a, b) => a.localeCompare(b)),
     [items, crop],
   );
+  useEffect(() => {
+    if (
+      district &&
+      !districts.some((item) => normalized(item) === normalized(district))
+    )
+      setDistrict("");
+  }, [district, districts]);
   const markets = useMemo(
     () =>
-      [...new Set(
-        items
-          .filter(
-            (item) =>
-              (!crop || normalized(item.crop) === normalized(crop)) &&
-              (!district || normalized(item.district) === normalized(district)),
-          )
-          .map((item) => item.market),
-      )].sort((a, b) => a.localeCompare(b)),
+      [
+        ...new Set(
+          items
+            .filter(
+              (item) =>
+                (!crop || normalized(item.crop) === normalized(crop)) &&
+                (!district ||
+                  normalized(item.district) === normalized(district)),
+            )
+            .map((item) => item.market),
+        ),
+      ].sort((a, b) => a.localeCompare(b)),
     [items, crop, district],
   );
   useEffect(() => {
-    if (market && !markets.some((item) => normalized(item) === normalized(market)))
+    if (
+      market &&
+      !markets.some((item) => normalized(item) === normalized(market))
+    )
       setMarket("");
   }, [market, markets]);
 
-  const filteredItems = useMemo(
-    () => filterPriceObservations(items, { crop, district, market, dateRange }),
+  const units = useMemo(
+    () =>
+      [
+        ...new Set(
+          filterPriceObservations(items, { crop, district, market, dateRange })
+            .map((item) => item.unit)
+            .filter(Boolean),
+        ),
+      ].sort((a, b) => a.localeCompare(b)),
     [items, crop, district, market, dateRange],
   );
-  const chart = useMemo(() => buildPriceChartModel(filteredItems), [filteredItems]);
-  const summaries = useMemo(
-    () => summarizeMarketPrices(filteredItems),
+  useEffect(() => {
+    if (!units.some((item) => normalized(item) === normalized(unit)))
+      setUnit(units[0] || "");
+  }, [unit, units]);
+
+  const activeUnit = units.some((item) => normalized(item) === normalized(unit))
+    ? unit
+    : units[0] || "";
+  const filteredItems = useMemo(
+    () =>
+      filterPriceObservations(items, {
+        crop,
+        district,
+        market,
+        unit: activeUnit,
+        dateRange,
+      }),
+    [items, crop, district, market, activeUnit, dateRange],
+  );
+  const chart = useMemo(
+    () => buildPriceChartModel(filteredItems),
     [filteredItems],
   );
   const demoRecords = filteredItems.some((item) => item.dataType === "DEMO");
-  const sufficientTrend = chart.points.length > 1;
 
   return (
     <div className="page-content">
@@ -205,7 +227,11 @@ export default function PriceInsights() {
             onChange={(event) => setCrop(event.target.value)}
           >
             {!crops.length && <option value="Tomato">Tomato</option>}
-            {crops.map((item) => <option key={item} value={item}>{item}</option>)}
+            {crops.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label={t("filterDistrict")}>
@@ -215,7 +241,9 @@ export default function PriceInsights() {
             onChange={(event) => setDistrict(event.target.value)}
           >
             <option value="">{t("allDistricts")}</option>
-            {districts.map((item) => <option key={item}>{item}</option>)}
+            {districts.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
           </select>
         </Field>
         <Field label="Market">
@@ -225,7 +253,21 @@ export default function PriceInsights() {
             onChange={(event) => setMarket(event.target.value)}
           >
             <option value="">All markets</option>
-            {markets.map((item) => <option key={item}>{item}</option>)}
+            {markets.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Price unit">
+          <select
+            aria-label="Price unit"
+            value={activeUnit}
+            onChange={(event) => setUnit(event.target.value)}
+          >
+            {!units.length && <option value="">No units available</option>}
+            {units.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
           </select>
         </Field>
         <Field label="Date range">
@@ -244,7 +286,11 @@ export default function PriceInsights() {
       {error ? (
         <div className="notice notice-error price-error" role="alert">
           <span>{error}</span>
-          <button className="button button-secondary" onClick={load} type="button">
+          <button
+            className="button button-secondary"
+            onClick={load}
+            type="button"
+          >
             <RefreshCw size={15} /> Retry
           </button>
         </div>
@@ -266,13 +312,19 @@ export default function PriceInsights() {
               <div className="panel-heading">
                 <div>
                   <span className="eyebrow">HISTORICAL OBSERVATIONS</span>
-                  <h2>{crop || "Crop"} · modal mandi price trend</h2>
+                  <h2>
+                    {crop || "Crop"} · {market || "prices by market"} ·{" "}
+                    {activeUnit || "unit"} over time
+                  </h2>
                 </div>
-                <span className="unit-pill">₹ · per series unit</span>
+                <span className="unit-pill">₹ / {activeUnit || "unit"}</span>
               </div>
               {chart.points.length ? (
                 <>
-                  <div className="chart-wrap" aria-label={`${crop} price trend graph`}>
+                  <div
+                    className="chart-wrap"
+                    aria-label={`${crop} price trend graph`}
+                  >
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
                         data={chart.points}
@@ -284,7 +336,9 @@ export default function PriceInsights() {
                           stroke="#e6e9e1"
                         />
                         <XAxis
-                          dataKey="observedAt"
+                          dataKey="timestamp"
+                          type="number"
+                          domain={["dataMin", "dataMax"]}
                           tickFormatter={(value) => prettyDate(value)}
                           tick={{ fontSize: 11, fill: "#718075" }}
                           axisLine={false}
@@ -298,7 +352,7 @@ export default function PriceInsights() {
                           axisLine={false}
                           tickLine={false}
                           label={{
-                            value: "Modal price (₹)",
+                            value: `Modal price (₹ / ${activeUnit || "unit"})`,
                             angle: -90,
                             position: "insideLeft",
                             fill: "#718075",
@@ -316,7 +370,7 @@ export default function PriceInsights() {
                         {chart.series.map((series, index) => (
                           <Line
                             key={series.key}
-                            name={`${series.crop} · ${series.market}${series.district ? ` · ${series.district}` : ""} / ${series.unit}`}
+                            name={`${series.market}${series.district ? ` · ${series.district}` : ""}`}
                             type="monotone"
                             dataKey={series.key}
                             stroke={colors[index % colors.length]}
@@ -330,9 +384,11 @@ export default function PriceInsights() {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                  {!sufficientTrend && (
+                  {chart.hasInsufficientSeries && (
                     <p className="trend-note">
-                      More observations are needed to show a meaningful price trend.
+                      {chart.hasTrend
+                        ? "Markets with one observation show only a point; more records are needed for a trend line."
+                        : "Only one observation is available for each selected market. More historical records are required to show a trend line."}
                     </p>
                   )}
                 </>
@@ -343,9 +399,9 @@ export default function PriceInsights() {
                 />
               )}
               <p className="chart-explainer">
-                Points show recorded observations only; lines connect the same
-                crop, market, district, and unit. Historical changes are not
-                forecasts.
+                Points show recorded observations for the selected crop and
+                unit. Each line represents one market; historical changes are
+                not forecasts.
               </p>
             </section>
             <section className="panel observations-panel">
@@ -354,8 +410,14 @@ export default function PriceInsights() {
                   <span className="eyebrow">SOURCE & FRESHNESS</span>
                   <h2>Latest references</h2>
                 </div>
-                <span className={`data-source-badge ${demoRecords ? "source-demo" : filteredItems.length ? "source-live" : "source-none"}`}>
-                  {demoRecords ? "Demo data" : filteredItems.length ? "Recorded data" : t("noObservations")}
+                <span
+                  className={`data-source-badge ${demoRecords ? "source-demo" : filteredItems.length ? "source-live" : "source-none"}`}
+                >
+                  {demoRecords
+                    ? "Demo data"
+                    : filteredItems.length
+                      ? "Recorded data"
+                      : t("noObservations")}
                 </span>
               </div>
               {filteredItems.length ? (
@@ -363,7 +425,10 @@ export default function PriceInsights() {
                   {[...filteredItems].reverse().map((item, index) => (
                     <div
                       className="observation-row"
-                      key={item.id || `${item.crop}-${item.market}-${item.observedAt}-${index}`}
+                      key={
+                        item.id ||
+                        `${item.crop}-${item.market}-${item.observedAt}-${index}`
+                      }
                     >
                       <span className="crop-avatar">
                         <BarChart3 size={16} />
@@ -371,7 +436,8 @@ export default function PriceInsights() {
                       <span className="observation-copy">
                         <strong>{item.market}</strong>
                         <small>
-                          {item.district || "Market"} · {prettyDate(item.observedAt)}
+                          {item.district || "Market"} ·{" "}
+                          {prettyDate(item.observedAt)}
                         </small>
                       </span>
                       <strong>
@@ -390,29 +456,6 @@ export default function PriceInsights() {
               </div>
             </section>
           </div>
-          <section className="price-summary-section" aria-labelledby="price-summary-title">
-            <div className="price-summary-section-heading">
-              <div>
-                <span className="eyebrow">HISTORICAL COMPARISON</span>
-                <h2 id="price-summary-title">Price change by market</h2>
-              </div>
-              <span>Same crop, market, and unit</span>
-            </div>
-            {summaries.length ? (
-              <div className="price-summary-grid">
-                {summaries.map((summary) => (
-                  <PriceSummary
-                    key={`${summary.crop}-${summary.market}-${summary.district}-${summary.unit}`}
-                    summary={summary}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="price-summary-insufficient">
-                Insufficient historical data
-              </p>
-            )}
-          </section>
         </>
       )}
     </div>

@@ -15,6 +15,17 @@ describe("HTTP API", () => {
     expect(response.body.error.message).toContain("sign in");
   });
 
+  it("does not return a conditional 304 for current-user authentication checks", async () => {
+    const response = await request(app)
+      .get("/api/auth/me")
+      .set("If-None-Match", '"cached-user-response"')
+      .set("If-Modified-Since", "Tue, 20 Oct 2026 12:00:00 GMT");
+
+    expect(response.status).toBe(401);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.body.error.message).toContain("sign in");
+  });
+
   it("uses a consistent not-found error response", async () => {
     const response = await request(app).get("/api/missing");
     expect(response.status).toBe(404);
